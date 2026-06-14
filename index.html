@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Dashboard Nutrition - Suivi des formations sanitaires</title>
+    <!-- Google Fonts & Font Awesome -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <!-- Chart.js pour les cadrans (gauge) et graphiques -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- SheetJS pour lire le fichier Excel -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #f4f9ff 0%, #e8f0f8 100%);
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+            color: #1a3e50;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px 0 10px;
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #1f6e43, #0a4c2c);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header h1 i {
+            background: none;
+            color: #2e7d5e;
+        }
+
+        .header p {
+            color: #4a6f5e;
+            margin-top: 8px;
+            font-weight: 500;
+        }
+
+        /* Barre de navigation horizontale (scrollable sur mobile) */
+        .nav-wrapper {
+            background: white;
+            border-radius: 60px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.05);
+            margin-bottom: 35px;
+            padding: 6px;
+            overflow-x: auto;
+            white-space: nowrap;
+            scrollbar-width: thin;
+        }
+
+        .nav-links {
+            display: inline-flex;
+            gap: 8px;
+            padding: 0 12px;
+        }
+
+        .nav-btn {
+            background: transparent;
+            border: none;
+            padding: 12px 24px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: 'Inter', sans-serif;
+            color: #2c5a44;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-btn i {
+            font-size: 1rem;
+            color: #51997c;
+        }
+
+        .nav-btn.active {
+            background: #1f6e43;
+            color: white;
+            box-shadow: 0 4px 12px rgba(31, 110, 67, 0.3);
+        }
+
+        .nav-btn.active i {
+            color: white;
+        }
+
+        .nav-btn:hover:not(.active) {
+            background: #e9f4ef;
+        }
+
+        /* Grille des cadrans */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 28px;
+            margin-bottom: 40px;
+        }
+
+        /* Cartes */
+        .card {
+            background: white;
+            border-radius: 32px;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.05);
+            padding: 20px 18px 25px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border: 1px solid rgba(100, 150, 120, 0.2);
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 35px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #1a4d38;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-left: 5px solid #2e9c6b;
+            padding-left: 15px;
+        }
+
+        .card-title i {
+            font-size: 1.4rem;
+            color: #2e9c6b;
+        }
+
+        /* Cadran 1 et 2 (type jauge circulaire) */
+        .gauge-container {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            margin: 0 auto 15px;
+        }
+
+        canvas.gauge-canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        .raw-value {
+            text-align: center;
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: #1f6e43;
+            margin-top: 5px;
+        }
+
+        .raw-label {
+            text-align: center;
+            font-size: 0.85rem;
+            color: #5c7f6e;
+            font-weight: 500;
+        }
+
+        /* Graphique à barres multiples */
+        .bars-container {
+            margin-top: 10px;
+        }
+
+        .bar-item {
+            margin-bottom: 18px;
+        }
+
+        .bar-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #2c5a44;
+        }
+
+        .bar-bg {
+            background-color: #e5efe9;
+            border-radius: 20px;
+            height: 10px;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 10px;
+            border-radius: 20px;
+            width: 0%;
+            transition: width 0.6s ease;
+        }
+
+        .indicator-value {
+            font-weight: 700;
+            margin-left: 8px;
+        }
+
+        .legend-tip {
+            font-size: 0.7rem;
+            text-align: center;
+            margin-top: 20px;
+            color: #739e86;
+            background: #f0f7f3;
+            padding: 8px;
+            border-radius: 20px;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #8aa99a;
+            font-style: italic;
+        }
+
+        footer {
+            text-align: center;
+            font-size: 0.75rem;
+            margin-top: 40px;
+            color: #628a74;
+            border-top: 1px solid #cde0d5;
+            padding-top: 25px;
+        }
+
+        @media (max-width: 720px) {
+            .container {
+                padding: 15px;
+            }
+            .nav-btn {
+                padding: 8px 16px;
+                font-size: 0.8rem;
+            }
+            .gauge-container {
+                width: 150px;
+                height: 150px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1><i class="fas fa-apple-alt"></i> Suivi Nutritionnel <br><span style="font-size: 0.9rem;">MAM / MAS par Formation sanitaire</span></h1>
+        <p><i class="fas fa-chalkboard-user"></i> Sélectionnez une formation dans la barre ci-dessous</p>
+    </div>
+
+    <!-- Navigation horizontale dynamique -->
+    <div class="nav-wrapper" id="navWrapper">
+        <div class="nav-links" id="navLinks"></div>
+    </div>
+
+    <!-- Zone des cadrans -->
+    <div id="dashboardContent">
+        <div class="dashboard-grid" id="dashboardGrid"></div>
+    </div>
+    <footer>
+        <i class="fas fa-file-excel"></i> Données issues du fichier Excel hébergé sur lien distant • Mise à jour automatique
+    </footer>
+</div>
+
+<script>
+    // Configuration : REMPLACEZ CETTE URL PAR LE LIEN PUBLIC DE VOTRE FICHIER EXCEL (RAW GitHub, OneDrive direct, etc.)
+    // Attention : pour GitHub, utilisez l'URL "raw" (ex: https://raw.githubusercontent.com/user/repo/branch/fichier.xlsx)
+    const EXCEL_URL = "https://raw.githubusercontent.com/votre-utilisateur/votre-repo/main/nutrition_data.xlsx"; // À MODIFIER
+
+    // Structure de données
+    let formationsList = [];   // [{ nom: "CSPS A", data: { mamNouveaux, masNouveaux, tauxGuerisonMAM, tauxAbandonMAM, mamDecedes, tauxDecesMasInterne, tauxAbandonMASAmbu, tauxGuerisonMASAmbu } }]
+    let currentFormation = null;
+    let chartInstances = { gauge1: null, gauge2: null };
+
+    // Fonction pour charger et parser le fichier Excel depuis l'URL
+    async function loadExcelFromUrl(url) {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`HTTP ${response.status} - Fichier non trouvé`);
+            const arrayBuffer = await response.arrayBuffer();
+            const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: "" });
+            if (!rows || rows.length < 2) throw new Error("Fichier vide ou mal formaté");
+            parseExcelData(rows);
+        } catch (error) {
+            console.error(error);
+            document.getElementById("dashboardGrid").innerHTML = `<div class="no-data"><i class="fas fa-exclamation-triangle"></i> Impossible de charger le fichier Excel. Vérifiez l'URL (format raw GitHub).<br>Erreur : ${error.message}</div>`;
+            document.getElementById("navLinks").innerHTML = `<div class="no-data" style="padding:10px;">Aucune donnée</div>`;
+        }
+    }
+
+    // Analyser les données selon les colonnes attendues
+    // Hypothèse : ligne 0 = en-têtes, ensuite chaque ligne = une formation.
+    function parseExcelData(rows) {
+        const headers = rows[0];
+        // Repérage des colonnes par mots-clés (flexible)
+        const getColIndex = (keywords) => {
+            for (let i = 0; i < headers.length; i++) {
+                const cell = String(headers[i] || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                if (keywords.some(kw => cell.includes(kw))) return i;
+            }
+            return -1;
+        };
+
+        const idxFormation = getColIndex(["formation", "structure", "csps", "centre", "nom"]);
+        const idxMamNouv = getColIndex(["malnutrition aiguë modéré", "mam", "nouveaux cas", "mam enfants nouveaux"]);
+        const idxMasNouv = getColIndex(["mas", "malnutrition aiguë sévère", "ambulatoire", "nouveaux cas ambulatoire"]);
+        const idxTauxGuerisonMAM = getColIndex(["taux de guérison des mam", "guérison mam"]);
+        const idxTauxAbandonMAM = getColIndex(["taux d’abandon de la mam", "abandon mam"]);
+        const idxMamDecedes = getColIndex(["mam enfants sortie décédés", "décédés mam", "sortie décédés"]);
+        const idxTauxDecesMASInterne = getColIndex(["taux de décès de la mas en interne", "décès mas interne"]);
+        const idxTauxAbandonMASAmbu = getColIndex(["taux abandon mas ambulatoire", "abandon mas ambu"]);
+        const idxTauxGuerisonMASAmbu = getColIndex(["taux de guérison des mas en ambulatoire", "guérison mas ambulatoire"]);
+
+        if (idxFormation === -1) throw new Error("Colonne 'Formation sanitaire' introuvable");
+
+        formationsList = [];
+        for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row || row.length === 0) continue;
+            const formationNom = row[idxFormation] ? String(row[idxFormation]).trim() : "";
+            if (formationNom === "") continue;
+
+            const safeNumber = (idx, defaultValue = 0) => {
+                if (idx === -1) return defaultValue;
+                let val = row[idx];
+                if (val === undefined || val === "") return defaultValue;
+                let num = parseFloat(String(val).replace(',', '.'));
+                return isNaN(num) ? defaultValue : num;
+            };
+
+            const data = {
+                mamNouveaux: safeNumber(idxMamNouv, 0),
+                masNouveaux: safeNumber(idxMasNouv, 0),
+                tauxGuerisonMAM: safeNumber(idxTauxGuerisonMAM, 0),
+                tauxAbandonMAM: safeNumber(idxTauxAbandonMAM, 0),
+                mamDecedes: safeNumber(idxMamDecedes, 0),
+                tauxDecesMasInterne: safeNumber(idxTauxDecesMASInterne, 0),
+                tauxAbandonMASAmbu: safeNumber(idxTauxAbandonMASAmbu, 0),
+                tauxGuerisonMASAmbu: safeNumber(idxTauxGuerisonMASAmbu, 0)
+            };
+            formationsList.push({ nom: formationNom, ...data });
+        }
+
+        if (formationsList.length === 0) throw new Error("Aucune formation trouvée après analyse");
+        buildNavigation();
+        if (formationsList.length > 0) {
+            selectFormation(formationsList[0].nom);
+        }
+    }
+
+    // Générer la barre de navigation
+    function buildNavigation() {
+        const navDiv = document.getElementById("navLinks");
+        navDiv.innerHTML = "";
+        formationsList.forEach(formation => {
+            const btn = document.createElement("button");
+            btn.className = "nav-btn";
+            btn.innerHTML = `<i class="fas fa-hospital-user"></i> ${formation.nom}`;
+            btn.addEventListener("click", () => selectFormation(formation.nom));
+            navDiv.appendChild(btn);
+        });
+    }
+
+    // Mettre à jour l'affichage selon la formation sélectionnée
+    function selectFormation(formationNom) {
+        currentFormation = formationNom;
+        // Mise à jour de la classe active
+        document.querySelectorAll(".nav-btn").forEach(btn => {
+            if (btn.textContent.includes(formationNom)) btn.classList.add("active");
+            else btn.classList.remove("active");
+        });
+        const formation = formationsList.find(f => f.nom === formationNom);
+        if (formation) renderDashboards(formation);
+    }
+
+    // Détruire les anciens graphiques pour éviter conflits
+    function destroyCharts() {
+        if (chartInstances.gauge1) { chartInstances.gauge1.destroy(); chartInstances.gauge1 = null; }
+        if (chartInstances.gauge2) { chartInstances.gauge2.destroy(); chartInstances.gauge2 = null; }
+    }
+
+    // Rendre les 3 cadrans
+    function renderDashboards(formation) {
+        const gridContainer = document.getElementById("dashboardGrid");
+        if (!gridContainer) return;
+        destroyCharts();
+
+        // Construction HTML des 3 cartes
+        gridContainer.innerHTML = `
+            <!-- Cadran 1 : MAM nouveaux cas -->
+            <div class="card">
+                <div class="card-title"><i class="fas fa-chart-simple"></i> MAM enfants - Nouveaux cas</div>
+                <div class="gauge-container">
+                    <canvas id="gaugeMAM" width="200" height="200"></canvas>
+                </div>
+                <div class="raw-value" id="mamRawValue">${formation.mamNouveaux}</div>
+                <div class="raw-label">cas enregistrés</div>
+            </div>
+            <!-- Cadran 2 : MAS Nouveaux cas Ambulatoire -->
+            <div class="card">
+                <div class="card-title"><i class="fas fa-chart-line"></i> MAS - Nouveaux cas Ambulatoire</div>
+                <div class="gauge-container">
+                    <canvas id="gaugeMAS" width="200" height="200"></canvas>
+                </div>
+                <div class="raw-value" id="masRawValue">${formation.masNouveaux}</div>
+                <div class="raw-label">nouveaux cas ambulatoires</div>
+            </div>
+            <!-- Cadran 3 : Graphiques en barres pour tous les taux -->
+            <div class="card">
+                <div class="card-title"><i class="fas fa-chart-bar"></i> Indicateurs de performance</div>
+                <div class="bars-container" id="barsContainer"></div>
+                <div class="legend-tip"><i class="fas fa-percent"></i> Pourcentages - seuil de référence</div>
+            </div>
+        `;
+
+        // Création des jauges (doughnut circulaire avec max arbitraire pour l'échelle)
+        // Pour les cadrans 1 & 2 on affiche une jauge sur 200 max (personnalisable)
+        const maxMAM = Math.max(...formationsList.map(f => f.mamNouveaux), 100);
+        const maxMAS = Math.max(...formationsList.map(f => f.masNouveaux), 100);
+        
+        const ctxMam = document.getElementById('gaugeMAM').getContext('2d');
+        const percentMam = Math.min(100, (formation.mamNouveaux / maxMAM) * 100);
+        chartInstances.gauge1 = new Chart(ctxMam, {
+            type: 'doughnut',
+            data: { datasets: [{ data: [percentMam, 100 - percentMam], backgroundColor: ['#2e9c6b', '#e0ede6'], borderWidth: 0, cutout: '70%', circumference: 270, rotation: 225 }] },
+            options: { responsive: true, maintainAspectRatio: true, plugins: { tooltip: { enabled: false }, legend: { display: false } } }
+        });
+
+        const ctxMas = document.getElementById('gaugeMAS').getContext('2d');
+        const percentMas = Math.min(100, (formation.masNouveaux / maxMAS) * 100);
+        chartInstances.gauge2 = new Chart(ctxMas, {
+            type: 'doughnut',
+            data: { datasets: [{ data: [percentMas, 100 - percentMas], backgroundColor: ['#e68a2e', '#f3e5db'], borderWidth: 0, cutout: '70%', circumference: 270, rotation: 225 }] },
+            options: { responsive: true, maintainAspectRatio: true, plugins: { tooltip: { enabled: false }, legend: { display: false } } }
+        });
+
+        // Mise à jour des valeurs brutes sous les cadrans
+        document.getElementById('mamRawValue').innerText = formation.mamNouveaux;
+        document.getElementById('masRawValue').innerText = formation.masNouveaux;
+
+        // Construction des barres pour le 3e cadran
+        const barsData = [
+            { label: "Taux de guérison MAM", value: formation.tauxGuerisonMAM, color: "#3b8b5e", suffix: "%", maxRef: 100 },
+            { label: "Taux d'abandon MAM", value: formation.tauxAbandonMAM, color: "#ca8a5c", suffix: "%", maxRef: 100 },
+            { label: "MAM sorties décédées", value: formation.mamDecedes, color: "#b5654b", suffix: " cas", maxRef: Math.max(...formationsList.map(f=>f.mamDecedes), 5) },
+            { label: "Taux décès MAS Interne", value: formation.tauxDecesMasInterne, color: "#bc6f4f", suffix: "%", maxRef: 100 },
+            { label: "Taux Abandon MAS Ambulatoire", value: formation.tauxAbandonMASAmbu, color: "#d9995c", suffix: "%", maxRef: 100 },
+            { label: "Taux guérison MAS Ambulatoire", value: formation.tauxGuerisonMASAmbu, color: "#469f73", suffix: "%", maxRef: 100 }
+        ];
+
+        const barsContainer = document.getElementById("barsContainer");
+        barsContainer.innerHTML = "";
+        barsData.forEach(item => {
+            let percentForBar = Math.min(100, (item.value / item.maxRef) * 100);
+            if (item.suffix === " cas") percentForBar = Math.min(100, (item.value / item.maxRef) * 100);
+            const barDiv = document.createElement("div");
+            barDiv.className = "bar-item";
+            barDiv.innerHTML = `
+                <div class="bar-label">
+                    <span><i class="fas fa-chart-simple" style="color:${item.color};"></i> ${item.label}</span>
+                    <span class="indicator-value">${item.value}${item.suffix}</span>
+                </div>
+                <div class="bar-bg">
+                    <div class="bar-fill" style="width: ${percentForBar}%; background: ${item.color};"></div>
+                </div>
+            `;
+            barsContainer.appendChild(barDiv);
+        });
+    }
+
+    // Initialisation : charger l'Excel depuis l'URL
+    if (EXCEL_URL === "https://raw.githubusercontent.com/votre-utilisateur/votre-repo/main/nutrition_data.xlsx") {
+        document.getElementById("dashboardGrid").innerHTML = `<div class="no-data"><i class="fas fa-link"></i> ⚠️ Veuillez modifier la variable EXCEL_URL dans le code avec le lien direct vers votre fichier Excel (raw GitHub).<br>Exemple: https://raw.githubusercontent.com/user/repo/main/donnees.xlsx</div>`;
+        document.getElementById("navLinks").innerHTML = `<div class="no-data">Aucune formation</div>`;
+    } else {
+        loadExcelFromUrl(EXCEL_URL);
+    }
+</script>
+</body>
+</html>
